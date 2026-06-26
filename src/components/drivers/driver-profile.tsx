@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Upload,
   Wallet as WalletIcon,
+  RefreshCw,
 } from 'lucide-react';
 
 import type { DriverProfile } from '@/lib/data';
@@ -114,6 +115,7 @@ export function DriverProfileView({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [refreshing, startRefresh] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ label: string; url: string } | null>(
     null,
@@ -187,6 +189,16 @@ export function DriverProfileView({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            disabled={refreshing}
+            onClick={() => startRefresh(() => router.refresh())}
+          >
+            <RefreshCw
+              className={cn('size-4', refreshing && 'animate-spin')}
+            />
+            Refresh
+          </Button>
           {flags.canOnboard &&
             (driver.is_approved ? (
               <RevokeApprovalDialog
