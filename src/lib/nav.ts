@@ -16,7 +16,8 @@ export type NavIcon =
   | 'requests'
   | 'reports'
   | 'operations'
-  | 'staff';
+  | 'staff'
+  | 'settings';
 
 export interface NavItem {
   key: keyof Dictionary['nav'];
@@ -44,6 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'fares', href: 'fares', icon: 'fares', capability: 'fares:write', group: 'finance' },
 
   { key: 'staff', href: 'staff', icon: 'staff', capability: 'staff:manage', group: 'admin' },
+  { key: 'appSettings', href: 'app-settings', icon: 'settings', capability: 'settings:write', group: 'admin' },
 ];
 
 export const NAV_GROUP_LABEL: Record<NavItem['group'], string> = {

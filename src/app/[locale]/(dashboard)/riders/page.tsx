@@ -111,11 +111,14 @@ export default async function RidersPage({
                     {r.phone ?? '—'}
                   </TableCell>
                   <TableCell>
-                    {r.is_blocked ? (
-                      <Badge variant="danger">Blocked</Badge>
-                    ) : (
-                      <Badge variant="success">Active</Badge>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {r.is_blocked ? (
+                        <Badge variant="danger">Blocked</Badge>
+                      ) : (
+                        <Badge variant="success">Active</Badge>
+                      )}
+                      {r.fine_due && <Badge variant="danger">Fine due</Badge>}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatDateTime(r.created_at)}

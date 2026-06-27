@@ -1679,3 +1679,129 @@ export async function changeMyPassword(
   await audit(session, 'account.password_change', 'admin_profile', session.uid);
   return null;
 }
+
+// ── App settings: cancellation/penalty config (super_admin/admin) ─────────────
+// Reads/writes the penalty knobs in app_config (see
+// docs/cancellation-and-penalties.md). Booleans are stored as 0/1 in `value`,
+// text settings (UPI id/QR) in `value_text`.
+
+const PENALTY_BOOL_KEYS = [
+  'penalty_enabled',
+  'rider_early_end_enabled',
+  'driver_midride_end_enabled',
+  'noshow_enabled',
+] as const;
+const PENALTY_TEXT_KEYS = [
+  'noshow_company_upi_id',
+  'noshow_company_upi_qr',
+] as const;
+const PENALTY_NUMBER_KEYS = [
+  'early_end_closing_fee_pct',
+  'early_end_floor',
+  'noshow_grace_min',
+  'noshow_arrival_radius_m',
+  'noshow_rider_max_strikes',
+  'noshow_fine_amount',
+  'noshow_unlock_sla_hours',
+  'noshow_strike_decay_months',
+  'noshow_driver_freeday_threshold',
+  'noshow_driver_freeday_yearly_cap',
+] as const;
+const ALL_PENALTY_KEYS = [
+  ...PENALTY_BOOL_KEYS,
+  ...PENALTY_TEXT_KEYS,
+  ...PENALTY_NUMBER_KEYS,
+];
+
+export type PenaltyConfigRow = {
+  key: string;
+  value: number | null;
+  value_text: string | null;
+  description: string | null;
+};
+
+export async function getPenaltyConfig(): Promise<PenaltyConfigRow[]> {
+  await requireCapability('settings:write');
+  const { data } = await serviceClient()
+    .from('app_config')
+    .select('key, value, value_text, description')
+    .in('key', ALL_PENALTY_KEYS);
+  return (data ?? []) as PenaltyConfigRow[];
+}
+
+export async function savePenaltyConfig(
+  input: Record<string, string>,
+): Promise<string | null> {
+  const session = await requireCapability('settings:write');
+  const now = new Date().toISOString();
+  const rows: {
+    key: string;
+    value: number | null;
+    value_text: string | null;
+    updated_at: string;
+  }[] = [];
+
+  for (const key of PENALTY_BOOL_KEYS) {
+    if (key in input) {
+      const on = input[key] === 'true' || input[key] === '1';
+      rows.push({ key, value: on ? 1 : 0, value_text: null, updated_at: now });
+    }
+  }
+  for (const key of PENALTY_NUMBER_KEYS) {
+    if (key in input) {
+      const n = Number(input[key]);
+      if (!Number.isFinite(n) || n < 0) return `Invalid value for ${key}`;
+      rows.push({ key, value: n, value_text: null, updated_at: now });
+    }
+  }
+  for (const key of PENALTY_TEXT_KEYS) {
+    if (key in input) {
+      rows.push({
+        key,
+        value: null,
+        value_text: input[key].trim(),
+        updated_at: now,
+      });
+    }
+  }
+
+  if (rows.length === 0) return null;
+  const { error } = await serviceClient()
+    .from('app_config')
+    .upsert(rows, { onConflict: 'key' });
+  if (error) return error.message;
+  await audit(session, 'config.update', 'app_config', 'penalty', 'Penalty settings', {
+    keys: rows.map((r) => r.key),
+  });
+  revalidatePath('/[locale]/app-settings', 'page');
+  return null;
+}
+
+// ── No-show fine: blocked riders awaiting manual UPI verification ─────────────
+// Surfaced per-rider on the Riders profile (see getRiderProfile.noShowBlock);
+// no separate queue page — admins find riders via search/filter.
+
+/// Verify the offline UPI payment, then clear the fine + strikes and unblock.
+export async function unblockRider(riderId: string): Promise<string | null> {
+  const session = await requireCapability('users:block');
+  const svc = serviceClient();
+  const { error } = await svc
+    .from('rider_blocks')
+    .update({
+      fine_status: 'paid',
+      unblocked_at: new Date().toISOString(),
+      unblocked_by: session.uid,
+    })
+    .eq('rider_id', riderId)
+    .eq('fine_status', 'pending');
+  if (error) return error.message;
+  await svc
+    .from('rider_strikes')
+    .update({ status: 'cleared' })
+    .eq('rider_id', riderId)
+    .eq('status', 'active');
+  await audit(session, 'rider.unblock', 'rider', riderId, 'No-show fine paid; unblocked');
+  revalidatePath('/[locale]/riders', 'page');
+  revalidatePath('/[locale]/riders/[id]', 'page');
+  return null;
+}

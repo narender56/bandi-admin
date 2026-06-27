@@ -398,6 +398,8 @@ export interface RiderRow {
   phone: string | null;
   is_blocked: boolean;
   created_at: string;
+  /** Has an unpaid no-show fine block (rider_blocks). */
+  fine_due?: boolean;
 }
 
 export async function listRiders(opts: ListOptions = {}): Promise<Page<RiderRow>> {
@@ -417,7 +419,25 @@ export async function listRiders(opts: ListOptions = {}): Promise<Page<RiderRow>
   if (opts.createdTo) q = q.lte('created_at', `${opts.createdTo}T23:59:59.999Z`);
 
   const { data, count } = await q.range(from, to);
-  return { rows: (data ?? []) as RiderRow[], total: count ?? 0 };
+  const rows = (data ?? []) as RiderRow[];
+  // Flag riders with an unpaid no-show fine block so the list can badge them
+  // (the rider app blocks on rider_blocks, which is separate from is_blocked).
+  if (rows.length) {
+    const { data: blocks } = await svc
+      .from('rider_blocks')
+      .select('rider_id')
+      .eq('fine_status', 'pending')
+      .is('unblocked_at', null)
+      .in(
+        'rider_id',
+        rows.map((r) => r.id),
+      );
+    const due = new Set(
+      (blocks ?? []).map((b) => (b as { rider_id: string }).rider_id),
+    );
+    for (const r of rows) r.fine_due = due.has(r.id);
+  }
+  return { rows, total: count ?? 0 };
 }
 
 export interface RideRow {
@@ -1309,6 +1329,13 @@ export interface RiderProfile {
   total_rides: number;
   ratings: DriverRatingRow[];
   complaints: ComplaintRow[];
+  /** Active no-show fine block (rider_blocks), or null if not fine-blocked. */
+  noShowBlock: {
+    fineAmount: number;
+    fineStatus: string;
+    blockedAt: string;
+    strikes: number;
+  } | null;
 }
 
 export async function getRiderProfile(id: string): Promise<RiderProfile | null> {
@@ -1319,6 +1346,33 @@ export async function getRiderProfile(id: string): Promise<RiderProfile | null> 
     .eq('id', id)
     .maybeSingle();
   if (!p) return null;
+
+  // No-show fine block: the rider app reads rider_blocks (not riders.is_blocked),
+  // so surface it here with the distinct-driver strike count for context.
+  const { data: blockRow } = await svc
+    .from('rider_blocks')
+    .select('fine_amount, fine_status, blocked_at')
+    .eq('rider_id', id)
+    .eq('fine_status', 'pending')
+    .is('unblocked_at', null)
+    .maybeSingle();
+  let noShowBlock: RiderProfile['noShowBlock'] = null;
+  if (blockRow) {
+    const { data: strikeRows } = await svc
+      .from('rider_strikes')
+      .select('driver_id')
+      .eq('rider_id', id)
+      .eq('status', 'active');
+    const distinctDrivers = new Set(
+      (strikeRows ?? []).map((s) => (s as { driver_id: string }).driver_id),
+    );
+    noShowBlock = {
+      fineAmount: Number((blockRow as { fine_amount: number }).fine_amount),
+      fineStatus: (blockRow as { fine_status: string }).fine_status,
+      blockedAt: (blockRow as { blocked_at: string }).blocked_at,
+      strikes: distinctDrivers.size,
+    };
+  }
 
   const [ridesRes, ratingsRes, complaintsRes] = await Promise.all([
     svc
@@ -1367,6 +1421,7 @@ export async function getRiderProfile(id: string): Promise<RiderProfile | null> 
       rater: raters.get(r.rater_id as string)?.full_name ?? null,
     })),
     complaints: (complaintsRes.data ?? []) as ComplaintRow[],
+    noShowBlock,
   };
 }
 

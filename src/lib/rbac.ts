@@ -24,7 +24,8 @@ export type Capability =
   | 'operations:manage' // own and resolve cross-domain exception cases
   | 'support:manage' // triage/resolve support tickets
   | 'profiles:view' // open driver/rider profiles
-  | 'sos:ack'; // acknowledge/resolve SOS alerts
+  | 'sos:ack' // acknowledge/resolve SOS alerts
+  | 'settings:write'; // edit app-wide settings (penalties, etc.)
 
 const MATRIX: Record<StaffRole, Capability[]> = {
   super_admin: [
@@ -43,6 +44,7 @@ const MATRIX: Record<StaffRole, Capability[]> = {
     'support:manage',
     'profiles:view',
     'sos:ack',
+    'settings:write',
   ],
   admin: [
     'analytics:read',
@@ -59,6 +61,7 @@ const MATRIX: Record<StaffRole, Capability[]> = {
     'support:manage',
     'profiles:view',
     'sos:ack',
+    'settings:write',
   ],
   support: ['support:manage', 'profiles:view', 'sos:ack', 'operations:manage'],
 };

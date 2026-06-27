@@ -18,6 +18,7 @@ import {
   Flag,
   ClipboardCheck,
   ShieldCheck,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -47,6 +48,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   reports: Flag,
   operations: ClipboardCheck,
   staff: ShieldCheck,
+  settings: Settings,
 };
 
 const GROUP_ORDER: NavItem['group'][] = [

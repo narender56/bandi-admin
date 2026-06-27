@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Star, Ban, CheckCircle2 } from 'lucide-react';
+import { Star, Ban, CheckCircle2, ShieldAlert, Copy } from 'lucide-react';
 
 import type { RiderProfile, RideSimulationPoint } from '@/lib/data';
-import { setUserBlocked } from '@/lib/actions';
+import { setUserBlocked, unblockRider } from '@/lib/actions';
 import { formatINR, formatDateTime, cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -80,12 +80,13 @@ export function RiderProfileView({
             <div className="mt-1 text-sm text-muted-foreground">
               {rider.phone ?? 'No phone'} · {rider.total_rides} rides
             </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {rider.is_blocked ? (
                 <Badge variant="danger">Blocked</Badge>
               ) : (
                 <Badge variant="success">Active</Badge>
               )}
+              {rider.noShowBlock && <Badge variant="danger">Fine due</Badge>}
             </div>
           </div>
         </div>
@@ -102,6 +103,16 @@ export function RiderProfileView({
             <BlockDialog onBlock={(reason) => run(() => setUserBlocked(rider.id, true, reason))} />
           ))}
       </div>
+
+      {rider.noShowBlock && (
+        <NoShowBlockCard
+          block={rider.noShowBlock}
+          riderId={rider.id}
+          canUnblock={canBlock}
+          disabled={isPending}
+          onUnblock={() => run(() => unblockRider(rider.id))}
+        />
+      )}
 
       <Tabs defaultValue="base">
         <TabsList className="flex-wrap">
@@ -249,6 +260,66 @@ export function RiderProfileView({
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function NoShowBlockCard({
+  block,
+  riderId,
+  canUnblock,
+  disabled,
+  onUnblock,
+}: {
+  block: NonNullable<RiderProfile['noShowBlock']>;
+  riderId: string;
+  canUnblock: boolean;
+  disabled: boolean;
+  onUnblock: () => void;
+}) {
+  return (
+    <Card className="border-danger/40 bg-danger/5">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-danger">
+          <ShieldAlert className="size-5" /> Blocked — unpaid no-show fine
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Reason">
+            {block.strikes > 0
+              ? `${block.strikes} no-show${block.strikes === 1 ? '' : 's'} from different drivers`
+              : 'Repeated no-shows'}
+          </Field>
+          <Field label="Fine">
+            {formatINR(block.fineAmount)} · {block.fineStatus}
+          </Field>
+          <Field label="Blocked on">{formatDateTime(block.blockedAt)}</Field>
+        </div>
+        <div className="space-y-1.5 rounded-lg border border-border bg-background p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            User ID — match this against the UPI payment note
+          </p>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(riderId)}
+            className="flex w-full items-center justify-between gap-2 text-left font-mono text-sm hover:text-primary"
+          >
+            <span className="truncate">{riderId}</span>
+            <Copy className="size-3.5 shrink-0" />
+          </button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Confirm the rider paid {formatINR(block.fineAmount)} to the company UPI
+          (the payment note carries this User ID), then unblock. There is no
+          payment gateway — verify on your UPI statement.
+        </p>
+        {canUnblock && (
+          <Button disabled={disabled} onClick={onUnblock}>
+            <CheckCircle2 className="size-4" /> Mark paid &amp; unblock
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

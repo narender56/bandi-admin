@@ -19,6 +19,7 @@ export interface Dictionary {
     reports: string;
     operations: string;
     staff: string;
+    appSettings: string;
     logout: string;
   };
   live: {
@@ -307,6 +308,7 @@ const en: Dictionary = {
     reports: 'Reports',
     operations: 'Operations queue',
     staff: 'Staff',
+    appSettings: 'App settings',
     logout: 'Log out',
   },
   live: {
@@ -595,6 +597,7 @@ const te: Dictionary = {
     reports: 'ఫిర్యాదులు',
     operations: 'ఆపరేషన్స్ క్యూ',
     staff: 'సిబ్బంది',
+    appSettings: 'యాప్ సెట్టింగ్‌లు',
     logout: 'లాగ్ అవుట్',
   },
   live: {
@@ -883,6 +886,7 @@ const hi: Dictionary = {
     reports: 'रिपोर्ट',
     operations: 'ऑपरेशंस कतार',
     staff: 'स्टाफ',
+    appSettings: 'ऐप सेटिंग्स',
     logout: 'लॉग आउट',
   },
   live: {
