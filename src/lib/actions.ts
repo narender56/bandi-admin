@@ -58,6 +58,25 @@ async function requireCapability(
   return session;
 }
 
+/**
+ * Canonicalize an Indian mobile number to E.164 (`+91XXXXXXXXXX`).
+ *
+ * The driver app logs in by sending exactly this form to Supabase, which then
+ * resolves the auth user by phone. If the admin stores the number in any other
+ * shape (bare 10 digits, leading 0, spaces), `auth.admin.createUser` registers
+ * the user under that raw string, the app's login lands on a *different* auth
+ * user, and the freshly created driver shows up as "not a registered driver".
+ * Every write of a driver phone — auth user, `drivers.phone`, OTP challenge —
+ * must pass through here so all three agree. Returns null for invalid input.
+ */
+function normalizePhone(raw: string): string | null {
+  let digits = (raw ?? '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  if (digits.length !== 10 || !/^[6-9]/.test(digits)) return null;
+  return `+91${digits}`;
+}
+
 /** Append an entry to the admin audit log (best-effort; never blocks the action). */
 async function audit(
   session: AdminSession,
@@ -372,8 +391,8 @@ export async function sendDriverOnboardingOtp(
   phone: string,
 ): Promise<{ challengeId?: string; testCode?: string; error?: string }> {
   const session = await requireCapability('drivers:onboard');
-  const normalized = phone.trim();
-  if (!/^(\+91[-\s]?|0)?[6-9]\d{9}$/.test(normalized)) return { error: 'Enter a valid Indian mobile number' };
+  const normalized = normalizePhone(phone);
+  if (!normalized) return { error: 'Enter a valid Indian mobile number' };
   const code = String(randomInt(100000, 1000000));
   const result = await serviceClient().from('driver_onboarding_otp_challenges').insert({
     phone: normalized,
@@ -460,6 +479,10 @@ export async function createDriver(input: {
   // optional. The phone is the identity, so it is required here.
   const requiredText = [input.fullName, input.email, input.phone, input.gender, input.dob, input.country, input.state, input.city, input.regNo, input.model, input.color];
   if (requiredText.some((value) => !value?.trim())) return 'Every driver and vehicle detail is required';
+  // Canonicalize once; the auth user, drivers.phone, and OTP challenge must all
+  // use this exact form or the driver cannot log in (see normalizePhone).
+  const phone = normalizePhone(input.phone);
+  if (!phone) return 'Enter a valid Indian mobile number';
   if (!input.upiId?.trim() && !input.paymentPhone?.trim()) {
     return 'Add at least one way for riders to pay the driver (UPI ID or payment phone)';
   }
@@ -476,12 +499,12 @@ export async function createDriver(input: {
   const challenge = await svc.from('driver_onboarding_otp_challenges')
     .select('id, phone, verified_at, expires_at, consumed_at')
     .eq('id', input.otpChallengeId).eq('created_by', session.uid).maybeSingle();
-  if (!challenge.data || challenge.data.phone !== input.phone.trim() || !challenge.data.verified_at || challenge.data.consumed_at) {
+  if (!challenge.data || challenge.data.phone !== phone || !challenge.data.verified_at || challenge.data.consumed_at) {
     return 'Verify this mobile number with OTP before creating the driver';
   }
   if (new Date(challenge.data.expires_at as string) < new Date()) return 'OTP verification has expired';
   const { data, error } = await svc.auth.admin.createUser({
-    phone: input.phone.trim(),
+    phone,
     email: input.email?.trim() || undefined,
     phone_confirm: true,
     email_confirm: !!input.email?.trim(),
@@ -500,7 +523,7 @@ export async function createDriver(input: {
       state: input.state.trim(),
       country: input.country.trim(),
       full_name: input.fullName.trim(),
-      phone: input.phone.trim(),
+      phone,
       email: input.email.trim(),
       dob: input.dob,
       gender: input.gender.trim(),
@@ -536,6 +559,13 @@ export async function createDriver(input: {
     if (walletResult.error) throw walletResult.error;
     await svc.from('driver_onboarding_otp_challenges').update({ consumed_at: new Date().toISOString() }).eq('id', input.otpChallengeId);
   } catch (error) {
+    // Roll back any rows that did land before removing the auth user, so a
+    // partial failure never leaves an orphaned driver/vehicle/wallet behind
+    // (which is what produced the stale "not a registered driver" rows).
+    await svc.from('driver_documents').delete().eq('driver_id', uid);
+    await svc.from('wallets').delete().eq('driver_id', uid);
+    await svc.from('vehicles').delete().eq('driver_id', uid);
+    await svc.from('drivers').delete().eq('id', uid);
     await svc.auth.admin.deleteUser(uid);
     return error instanceof Error ? error.message : 'Could not create driver';
   }
@@ -546,6 +576,79 @@ export async function createDriver(input: {
     onboarding_verified_at: challenge.data.verified_at,
   });
   revalidatePath('/[locale]/drivers', 'page');
+  return null;
+}
+
+/**
+ * Quick mock account for testing. Creates (or reuses) the auth user for the
+ * phone, then a ready-to-use profile — a driver is auto-approved with a vehicle
+ * and a small wallet, a rider is just a profile. The phone is canonicalized the
+ * same way the apps log in, so the new account can sign in immediately with the
+ * mock OTP. This is the small dev path behind "Add mock user" — no KYC, no docs.
+ */
+export async function createMockUser(input: {
+  role: 'driver' | 'rider';
+  fullName: string;
+  phone: string;
+  vehicleType?: VehicleType;
+}): Promise<string | null> {
+  await requireCapability('drivers:onboard');
+  if (!input.fullName.trim()) return 'Name is required';
+  const phone = normalizePhone(input.phone);
+  if (!phone) return 'Enter a valid Indian mobile number';
+  const svc = serviceClient();
+
+  // Reuse the auth user if this phone already exists (Supabase stores it
+  // without the leading +), otherwise create it confirmed so OTP login works.
+  const bare = phone.replace('+', '');
+  const { data: list, error: listError } = await svc.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (listError) return listError.message;
+  let uid = list.users.find((u) => u.phone === bare)?.id ?? null;
+  if (!uid) {
+    const { data, error } = await svc.auth.admin.createUser({ phone, phone_confirm: true });
+    if (error || !data.user) return error?.message ?? 'Could not create the auth user';
+    uid = data.user.id;
+  }
+
+  if (input.role === 'rider') {
+    const result = await svc.from('riders').upsert({
+      id: uid,
+      full_name: input.fullName.trim(),
+      phone,
+      locale: 'en',
+    });
+    if (result.error) return result.error.message;
+  } else {
+    const driverResult = await svc.from('drivers').upsert({
+      id: uid,
+      full_name: input.fullName.trim(),
+      phone,
+      locale: 'en',
+      status: 'offline',
+      is_approved: true,
+      is_blocked: false,
+      is_on_hold: false,
+      country: 'India',
+      state: 'Telangana',
+      city: 'Hyderabad',
+    });
+    if (driverResult.error) return driverResult.error.message;
+    const { data: vehicle } = await svc.from('vehicles').select('id').eq('driver_id', uid).maybeSingle();
+    if (!vehicle) {
+      const vehicleResult = await svc.from('vehicles').insert({
+        driver_id: uid,
+        type: input.vehicleType ?? 'auto',
+        reg_no: `TS09MK${bare.slice(-4)}`,
+        model: 'Mock vehicle',
+        color: 'White',
+        is_active: true,
+      });
+      if (vehicleResult.error) return vehicleResult.error.message;
+    }
+    await svc.from('wallets').upsert({ driver_id: uid, balance: 500 });
+  }
+  revalidatePath('/[locale]/drivers', 'page');
+  revalidatePath('/[locale]/riders', 'page');
   return null;
 }
 
@@ -578,13 +681,24 @@ export async function updateDriverBaseData(
   if (!values.regNo.trim() || !values.model.trim() || !values.color.trim()) {
     return 'Registration, model, and vehicle color are required';
   }
+  const phone = normalizePhone(values.phone);
+  if (!phone) return 'Enter a valid Indian mobile number';
   const svc = serviceClient();
+
+  // Keep the auth user's phone in lockstep with the driver record — login
+  // resolves the driver by auth uid, but a changed number must still be able
+  // to receive its OTP on the same account.
+  const authUpdate = await svc.auth.admin.updateUserById(driverId, {
+    phone,
+    phone_confirm: true,
+  });
+  if (authUpdate.error) return authUpdate.error.message;
 
   await svc
     .from('drivers')
     .update({
       full_name: values.fullName.trim(),
-      phone: values.phone.trim() || null,
+      phone,
       email: values.email.trim() || null,
       dob: values.dob.trim() || null,
       gender: values.gender.trim() || null,

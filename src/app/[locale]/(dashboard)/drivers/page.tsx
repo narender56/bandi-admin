@@ -27,6 +27,7 @@ import { Pagination } from '@/components/data/pagination';
 import { UrlTabs } from '@/components/data/url-tabs';
 import { DirectoryFilters } from '@/components/data/directory-filters';
 import { CreateDriverDialog } from '@/components/drivers/create-driver-dialog';
+import { CreateMockUserDialog } from '@/components/drivers/create-mock-user-dialog';
 
 const TABS: { key: DriverTab; label: string }[] = [
   { key: 'approved', label: 'Approved' },
@@ -160,7 +161,12 @@ export default async function DriversPage({
             Onboarding funnel and active roster
           </p>
         </div>
-        {can(role, 'drivers:onboard') && <CreateDriverDialog />}
+        {can(role, 'drivers:onboard') && (
+          <div className="flex items-center gap-2">
+            <CreateMockUserDialog />
+            <CreateDriverDialog />
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
