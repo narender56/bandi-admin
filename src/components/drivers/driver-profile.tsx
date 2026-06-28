@@ -581,6 +581,51 @@ export function DriverProfileView({
             </div>
             <Card className="mt-4">
               <CardHeader>
+                <CardTitle>
+                  Free-day credits ·{' '}
+                  {driver.freeDayCredits.filter((c) => c.status === 'pending').length}{' '}
+                  unused
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Granted</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {driver.freeDayCredits.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="py-10 text-center text-muted-foreground">
+                          No free subscription days given to this driver.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      driver.freeDayCredits.map((c) => (
+                        <TableRow key={c.id}>
+                          <TableCell>
+                            {c.source === 'noshow_reward' ? 'No-show comp' : c.source}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={c.status === 'pending' ? 'success' : 'neutral'}>
+                              {c.status === 'pending' ? 'Unused' : c.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatDateTime(c.created_at)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+            <Card className="mt-4">
+              <CardHeader>
                 <CardTitle>Closure settlements</CardTitle>
               </CardHeader>
               <CardContent className="p-0">

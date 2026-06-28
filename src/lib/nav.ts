@@ -16,6 +16,7 @@ export type NavIcon =
   | 'requests'
   | 'reports'
   | 'operations'
+  | 'disputes'
   | 'staff'
   | 'settings';
 
@@ -39,6 +40,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'support', href: 'support', icon: 'support', capability: 'support:manage', group: 'operations' },
   { key: 'requests', href: 'requests', icon: 'requests', capability: 'support:manage', group: 'operations' },
   { key: 'reports', href: 'reports', icon: 'reports', capability: 'support:manage', group: 'operations' },
+  { key: 'disputes', href: 'disputes', icon: 'disputes', capability: 'support:manage', group: 'operations' },
 
   { key: 'money', href: 'money', icon: 'money', capability: 'finance:view', group: 'finance' },
   { key: 'analytics', href: 'analytics', icon: 'analytics', capability: 'analytics:read', group: 'finance' },

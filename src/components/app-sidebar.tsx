@@ -17,6 +17,7 @@ import {
   Inbox,
   Flag,
   ClipboardCheck,
+  Gavel,
   ShieldCheck,
   Settings,
   type LucideIcon,
@@ -47,6 +48,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   requests: Inbox,
   reports: Flag,
   operations: ClipboardCheck,
+  disputes: Gavel,
   staff: ShieldCheck,
   settings: Settings,
 };

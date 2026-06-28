@@ -25,7 +25,6 @@ const SECTIONS: { title: string; note?: string; fields: Field[] }[] = [
     fields: [
       { key: 'rider_early_end_enabled', label: 'Allow rider to end mid-ride', type: 'bool' },
       { key: 'early_end_closing_fee_pct', label: 'Closing fee (% of remaining estimate)', type: 'num' },
-      { key: 'early_end_floor', label: 'Minimum closing fee (₹)', type: 'num' },
     ],
   },
   {
@@ -40,14 +39,10 @@ const SECTIONS: { title: string; note?: string; fields: Field[] }[] = [
       { key: 'noshow_enabled', label: 'Enable no-show reporting', type: 'bool' },
       { key: 'noshow_grace_min', label: 'Grace wait at pickup (minutes)', type: 'num' },
       { key: 'noshow_arrival_radius_m', label: 'Arrival radius to allow report (m)', type: 'num' },
-      { key: 'noshow_rider_max_strikes', label: 'Strikes before a rider is blocked', type: 'num' },
-      { key: 'noshow_fine_amount', label: 'Unblock fine (₹)', type: 'num' },
+      { key: 'noshow_fine_amount', label: 'No-show fee on review (₹)', type: 'num' },
       { key: 'noshow_company_upi_id', label: 'Company UPI ID (shown to blocked rider)', type: 'text' },
       { key: 'noshow_company_upi_qr', label: 'Company UPI QR image URL', type: 'text' },
       { key: 'noshow_unlock_sla_hours', label: 'Unlock SLA after payment (hours)', type: 'num' },
-      { key: 'noshow_strike_decay_months', label: 'Unpaid strikes decay after (months)', type: 'num' },
-      { key: 'noshow_driver_freeday_threshold', label: 'No-shows that earn a driver 1 free day', type: 'num' },
-      { key: 'noshow_driver_freeday_yearly_cap', label: 'Max free days per driver per year', type: 'num' },
     ],
   },
 ];

@@ -1697,15 +1697,14 @@ const PENALTY_TEXT_KEYS = [
 ] as const;
 const PENALTY_NUMBER_KEYS = [
   'early_end_closing_fee_pct',
-  'early_end_floor',
+  // early_end_floor intentionally omitted: end_ride_early no longer applies a
+  // minimum closing fee (charge is exactly the configured % of remaining).
   'noshow_grace_min',
   'noshow_arrival_radius_m',
-  'noshow_rider_max_strikes',
   'noshow_fine_amount',
   'noshow_unlock_sla_hours',
-  'noshow_strike_decay_months',
-  'noshow_driver_freeday_threshold',
-  'noshow_driver_freeday_yearly_cap',
+  // Removed under manual review: strikes / strike decay / driver free-day
+  // threshold+cap are no longer used (no automatic penalty engine).
 ] as const;
 const ALL_PENALTY_KEYS = [
   ...PENALTY_BOOL_KEYS,
@@ -1803,5 +1802,69 @@ export async function unblockRider(riderId: string): Promise<string | null> {
   await audit(session, 'rider.unblock', 'rider', riderId, 'No-show fine paid; unblocked');
   revalidatePath('/[locale]/riders', 'page');
   revalidatePath('/[locale]/riders/[id]', 'page');
+  return null;
+}
+
+export type DisputeOutcome = 'penalise_rider' | 'comp_driver' | 'none';
+
+/** Resolve a ride dispute and apply the chosen outcome (admin adjudication).
+ *  penalise_rider → the manual ₹99 UPI block; comp_driver → a free-day credit;
+ *  none → dismiss. Mirrors resolve_ride_dispute() but runs via the service
+ *  client so resolved_by is the signed-in admin. */
+export async function resolveDispute(
+  disputeId: string,
+  outcome: DisputeOutcome,
+  note?: string,
+): Promise<string | null> {
+  const session = await requireCapability('users:block');
+  const svc = serviceClient();
+  const { data: d } = await svc
+    .from('ride_disputes')
+    .select('rider_id, driver_id, status')
+    .eq('id', disputeId)
+    .maybeSingle();
+  if (!d) return 'Dispute not found';
+  if (d.status !== 'open') return 'Already resolved';
+
+  if (outcome === 'penalise_rider' && d.rider_id) {
+    const { data: cfg } = await svc
+      .from('app_config')
+      .select('value')
+      .eq('key', 'noshow_fine_amount')
+      .maybeSingle();
+    const fine = Number(cfg?.value ?? 99);
+    const { error } = await svc.from('rider_blocks').upsert(
+      {
+        rider_id: d.rider_id,
+        fine_amount: fine,
+        fine_status: 'pending',
+        blocked_at: new Date().toISOString(),
+        unblocked_at: null,
+        unblocked_by: null,
+      },
+      { onConflict: 'rider_id' },
+    );
+    if (error) return error.message;
+  } else if (outcome === 'comp_driver' && d.driver_id) {
+    const { error } = await svc
+      .from('driver_free_day_credits')
+      .insert({ driver_id: d.driver_id, source: 'noshow_reward' });
+    if (error) return error.message;
+  }
+
+  const { error } = await svc
+    .from('ride_disputes')
+    .update({
+      status: 'resolved',
+      outcome,
+      resolution_note: note?.trim() || null,
+      resolved_by: session.uid,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq('id', disputeId);
+  if (error) return error.message;
+  await audit(session, 'dispute.resolve', 'ride_dispute', disputeId, `Outcome: ${outcome}`);
+  revalidatePath('/[locale]/disputes', 'page');
+  revalidatePath('/[locale]/riders', 'page');
   return null;
 }

@@ -443,6 +443,115 @@ export async function listRiders(opts: ListOptions = {}): Promise<Page<RiderRow>
   return { rows, total: count ?? 0 };
 }
 
+export interface DisputeRow {
+  id: string;
+  ride_id: string;
+  kind: string;
+  raised_by: string;
+  reason: string | null;
+  evidence: Record<string, unknown>;
+  status: string;
+  created_at: string;
+  rider_id: string | null;
+  rider_name: string | null;
+  rider_phone: string | null;
+  driver_id: string | null;
+  driver_name: string | null;
+  driver_phone: string | null;
+  driver_pending_credits: number;
+  pickup_address: string | null;
+  drop_address: string | null;
+}
+
+export const DISPUTES_PAGE_SIZE = 15;
+
+/** Open ride disputes awaiting review, paginated + searchable by rider/driver
+ *  name or phone. */
+export async function listDisputes(
+  opts: { page?: number; search?: string } = {},
+): Promise<{ rows: DisputeRow[]; total: number }> {
+  const svc = serviceClient();
+  const page = Math.max(1, opts.page ?? 1);
+  const from = (page - 1) * DISPUTES_PAGE_SIZE;
+
+  // Search matches the rider's or driver's name/phone: resolve their ids first,
+  // then filter disputes to those parties.
+  let matchIds: string[] | null = null;
+  if (opts.search) {
+    const q = `%${opts.search}%`;
+    const [riders, drivers] = await Promise.all([
+      svc.from('riders').select('id').or(`full_name.ilike.${q},phone.ilike.${q}`),
+      svc.from('drivers').select('id').or(`full_name.ilike.${q},phone.ilike.${q}`),
+    ]);
+    matchIds = [
+      ...asRows(riders.data).map((r) => r.id as string),
+      ...asRows(drivers.data).map((r) => r.id as string),
+    ];
+    if (matchIds.length === 0) return { rows: [], total: 0 };
+  }
+
+  let query = svc
+    .from('ride_disputes')
+    .select(
+      'id, ride_id, kind, raised_by, reason, evidence, status, created_at, rider_id, driver_id, ' +
+        'rider:riders(full_name, phone), driver:drivers(full_name, phone), ride:rides(pickup_address, drop_address)',
+      { count: 'exact' },
+    )
+    .eq('status', 'open');
+  if (matchIds) {
+    const inList = `(${matchIds.join(',')})`;
+    query = query.or(`rider_id.in.${inList},driver_id.in.${inList}`);
+  }
+
+  const { data, count } = await query
+    .order('created_at', { ascending: true })
+    .range(from, from + DISPUTES_PAGE_SIZE - 1);
+
+  // How many unused free-day credits each driver on this page already has —
+  // shown next to "Comp driver" so an admin doesn't over-grant.
+  const driverIds = [
+    ...new Set(asRows(data).map((r) => r.driver_id as string).filter(Boolean)),
+  ];
+  const pendingByDriver = new Map<string, number>();
+  if (driverIds.length) {
+    const { data: credits } = await svc
+      .from('driver_free_day_credits')
+      .select('driver_id')
+      .eq('status', 'pending')
+      .in('driver_id', driverIds);
+    for (const c of asRows(credits)) {
+      const id = c.driver_id as string;
+      pendingByDriver.set(id, (pendingByDriver.get(id) ?? 0) + 1);
+    }
+  }
+
+  const rows = asRows(data).map((r) => {
+    const rider = (r as { rider?: { full_name?: string; phone?: string } }).rider;
+    const driver = (r as { driver?: { full_name?: string; phone?: string } }).driver;
+    const ride = (r as { ride?: { pickup_address?: string; drop_address?: string } }).ride;
+    return {
+      id: r.id as string,
+      ride_id: r.ride_id as string,
+      kind: r.kind as string,
+      raised_by: r.raised_by as string,
+      reason: (r.reason as string) ?? null,
+      evidence: (r.evidence as Record<string, unknown>) ?? {},
+      status: r.status as string,
+      created_at: r.created_at as string,
+      rider_id: (r.rider_id as string) ?? null,
+      rider_name: rider?.full_name ?? null,
+      rider_phone: rider?.phone ?? null,
+      driver_id: (r.driver_id as string) ?? null,
+      driver_name: driver?.full_name ?? null,
+      driver_phone: driver?.phone ?? null,
+      driver_pending_credits: pendingByDriver.get(r.driver_id as string) ?? 0,
+      pickup_address: ride?.pickup_address ?? null,
+      drop_address: ride?.drop_address ?? null,
+    };
+  });
+  return { rows, total: count ?? 0 };
+}
+
 export interface RideRow {
   id: string;
   status: string;
@@ -1186,6 +1295,14 @@ export interface DriverProfile {
   wallet_txns: WalletTxnRow[];
   withdrawals: WithdrawalRequestRow[];
   earnings_total: number;
+  freeDayCredits: FreeDayCreditRow[];
+}
+
+export interface FreeDayCreditRow {
+  id: string;
+  source: string;
+  status: string;
+  created_at: string;
 }
 
 export async function getDriverProfile(id: string): Promise<DriverProfile | null> {
@@ -1286,6 +1403,15 @@ export async function getDriverProfile(id: string): Promise<DriverProfile | null
   const ratingRows = asRows(ratings.data);
   const raters = await resolveUsers(ratingRows.map((r) => r.rater_id as string));
 
+  // Free-day credits granted to this driver (e.g. dispute comp). Lets an admin
+  // see, before comping again, what they've already given.
+  const { data: creditsData } = await svc
+    .from('driver_free_day_credits')
+    .select('id, source, status, created_at')
+    .eq('driver_id', id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
   return {
     id: row.id as string,
     full_name: profile?.full_name ?? null,
@@ -1337,6 +1463,7 @@ export async function getDriverProfile(id: string): Promise<DriverProfile | null
     wallet_txns: (txns.data ?? []) as WalletTxnRow[],
     withdrawals: (withdrawals.data ?? []) as WithdrawalRequestRow[],
     earnings_total: earnings,
+    freeDayCredits: (creditsData ?? []) as FreeDayCreditRow[],
   };
 }
 
