@@ -53,6 +53,19 @@ const DRIVER_FILTERS = [
       { value: 'on_hold', label: 'On hold' },
     ],
   },
+  {
+    key: 'vehicleType',
+    label: 'Vehicle type',
+    kind: 'select' as const,
+    options: [
+      { value: 'bike', label: 'Bike' },
+      { value: 'auto', label: 'Auto' },
+      { value: 'hatchback', label: 'Hatchback' },
+      { value: 'sedan', label: 'Sedan' },
+      { value: 'premium', label: 'Premium' },
+      { value: 'xl', label: 'XL' },
+    ],
+  },
   { key: 'country', label: 'Country', kind: 'text' as const, placeholder: 'India' },
   { key: 'state', label: 'State', kind: 'text' as const, placeholder: 'Telangana' },
   { key: 'city', label: 'Area / city', kind: 'text' as const, placeholder: 'Hyderabad' },
@@ -111,6 +124,7 @@ export default async function DriversPage({
     q?: string;
     page?: string;
     status?: string;
+    vehicleType?: string;
     country?: string;
     state?: string;
     city?: string;
@@ -141,6 +155,7 @@ export default async function DriversPage({
     page,
     search,
     status: sp.status || undefined,
+    vehicleType: sp.vehicleType || undefined,
     country: sp.country?.trim() || undefined,
     state: sp.state?.trim() || undefined,
     city: sp.city?.trim() || undefined,
@@ -225,16 +240,25 @@ export default async function DriversPage({
                     {d.phone ?? '—'}
                   </TableCell>
                   <TableCell>
-                    {d.reg_no ? (
-                      <span className="flex items-center gap-1.5 text-sm">
-                        <Car className="size-3.5 text-muted-foreground" />
-                        {d.reg_no}
-                        {d.model && (
-                          <span className="text-muted-foreground">
-                            · {d.model}
+                    {d.vehicle_type || d.reg_no ? (
+                      <div className="flex flex-col gap-1">
+                        {d.vehicle_type && (
+                          <Badge variant="neutral" className="w-fit capitalize">
+                            {d.vehicle_type === 'xl' ? 'XL' : d.vehicle_type}
+                          </Badge>
+                        )}
+                        {d.reg_no && (
+                          <span className="flex items-center gap-1.5 text-sm">
+                            <Car className="size-3.5 text-muted-foreground" />
+                            {d.reg_no}
+                            {d.model && (
+                              <span className="text-muted-foreground">
+                                · {d.model}
+                              </span>
+                            )}
                           </span>
                         )}
-                      </span>
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}

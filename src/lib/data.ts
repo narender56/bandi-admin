@@ -13,6 +13,7 @@ type QueryFilter = {
   gte: (column: string, value: unknown) => QueryFilter;
   lte: (column: string, value: unknown) => QueryFilter;
   ilike: (column: string, pattern: string) => QueryFilter;
+  in: (column: string, values: readonly unknown[]) => QueryFilter;
 };
 
 /**
@@ -121,6 +122,7 @@ export interface ListOptions {
   state?: string;
   city?: string;
   minRating?: number;
+  vehicleType?: string;
   createdFrom?: string;
   createdTo?: string;
   deactivatedFrom?: string;
@@ -149,6 +151,7 @@ export interface DriverRow {
   rating: number;
   reg_no: string | null;
   model: string | null;
+  vehicle_type: string | null;
   settlement_status: string | null;
   settlement_amount: number | null;
   settlement_requested_at: string | null;
@@ -162,7 +165,7 @@ export async function listDrivers(opts: ListOptions = {}): Promise<Page<DriverRo
     .from('drivers')
     .select(
       'id, status, is_approved, is_founder, is_blocked, city, total_rides, rating, ' +
-        'full_name, phone, vehicles(reg_no, model)',
+        'full_name, phone, vehicles(reg_no, model, type, is_active)',
       { count: 'exact' },
     )
     .order('created_at', { ascending: false });
@@ -195,11 +198,14 @@ export const DRIVERS_PAGE_SIZE = 10;
 
 const DRIVER_SELECT =
   'id, status, is_approved, is_founder, is_blocked, deactivated_at, country, state, city, total_rides, rating, created_at, ' +
-  'full_name, phone, vehicles(reg_no, model)';
+  'full_name, phone, vehicles(reg_no, model, type, is_active)';
 
 function mapDriverRow(d: Row): DriverRow {
-  const vehicles = d.vehicles as { reg_no?: string; model?: string }[] | null;
-  const vehicle = vehicles?.[0];
+  const vehicles = d.vehicles as
+    | { reg_no?: string; model?: string; type?: string; is_active?: boolean }[]
+    | null;
+  // Prefer the active vehicle when a driver has more than one on file.
+  const vehicle = vehicles?.find((v) => v.is_active) ?? vehicles?.[0];
   return {
     id: d.id as string,
     full_name: (d.full_name as string) ?? null,
@@ -216,6 +222,7 @@ function mapDriverRow(d: Row): DriverRow {
     rating: (d.rating as number) ?? 5,
     reg_no: vehicle?.reg_no ?? null,
     model: vehicle?.model ?? null,
+    vehicle_type: vehicle?.type ?? null,
     settlement_status: null,
     settlement_amount: null,
     settlement_requested_at: null,
@@ -264,8 +271,24 @@ export async function listDriversByTab(
   const page = Math.max(1, opts.page ?? 1);
   const size = DRIVERS_PAGE_SIZE;
   const searchFilter = `full_name.ilike.%${search}%,phone.ilike.%${search}%`;
+
+  // Vehicle-type filter lives on the vehicles table — resolve the matching
+  // driver ids first, then constrain every driver query to them.
+  let vehicleDriverIds: string[] | null = null;
+  if (opts.vehicleType) {
+    const { data: vrows } = await svc
+      .from('vehicles')
+      .select('driver_id')
+      .eq('type', opts.vehicleType)
+      .eq('is_active', true);
+    vehicleDriverIds = [
+      ...new Set(asRows(vrows).map((v) => v.driver_id as string)),
+    ];
+  }
+
   const applyDriverFilters = (q: QueryFilter, includeDeactivatedDate = false) => {
     let next = q;
+    if (vehicleDriverIds) next = next.in('id', vehicleDriverIds);
     if (opts.country) next = next.eq('country', opts.country);
     if (opts.state) next = next.eq('state', opts.state);
     if (opts.city) next = next.ilike('city', `%${opts.city}%`);
