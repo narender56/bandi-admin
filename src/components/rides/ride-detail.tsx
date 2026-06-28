@@ -203,9 +203,9 @@ export function RideDetailView({
                   {ride.duration_min != null ? `${ride.duration_min} min` : '—'}
                 </Field>
                 <Field label="Payment">{ride.payment_method ?? '—'}</Field>
-                <Field label="Fare">
-                  {ride.locked_fare != null
-                    ? formatINR(ride.locked_fare)
+                <Field label={ride.ended_early ? 'Paid amount (adjusted)' : 'Paid amount'}>
+                  {ride.paid_amount != null
+                    ? formatINR(ride.paid_amount)
                     : ride.est_fare_min != null
                       ? `${formatINR(ride.est_fare_min)}–${formatINR(ride.est_fare_max)}`
                       : '—'}

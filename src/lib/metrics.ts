@@ -227,7 +227,7 @@ export async function getDashboardMetrics(range: ResolvedRange): Promise<Dashboa
   const [ridesRes, newRidersRes, newDriversRes, subsRes, active, online] = await Promise.all([
     svc
       .from('rides')
-      .select('status, requested_at, completed_at, locked_fare')
+      .select('status, requested_at, completed_at, locked_fare, final_fare')
       .gte('requested_at', fromIso)
       .lte('requested_at', toIso),
     svc

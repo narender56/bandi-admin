@@ -5,6 +5,9 @@ import { serviceClient } from './supabase';
 // helper narrows query results to plain records for field access.
 type Row = Record<string, unknown>;
 const asRows = (data: unknown): Row[] => (Array.isArray(data) ? (data as Row[]) : []);
+const ridePaidAmount = (row: Row): number | null =>
+  ((row.final_fare as number | null | undefined) ?? (row.locked_fare as number | null | undefined)) ??
+  null;
 type QueryFilter = {
   eq: (column: string, value: unknown) => QueryFilter;
   gte: (column: string, value: unknown) => QueryFilter;
@@ -450,6 +453,9 @@ export interface RideRow {
   drop_lat: number | null;
   drop_lng: number | null;
   locked_fare: number | null;
+  final_fare: number | null;
+  ended_early: boolean;
+  paid_amount: number | null;
   requested_at: string;
   accepted_at: string | null;
   started_at: string | null;
@@ -464,7 +470,7 @@ export async function listRides(limit = 100): Promise<RideRow[]> {
   const { data } = await svc
     .from('rides')
     .select(
-      'id, status, pickup_address, drop_address, locked_fare, requested_at, ' +
+      'id, status, pickup_address, drop_address, locked_fare, final_fare, ended_early, requested_at, ' +
         'rider:riders!rides_rider_id_fkey(full_name), ' +
         'driver:drivers!rides_driver_id_fkey(full_name)',
     )
@@ -484,6 +490,9 @@ export async function listRides(limit = 100): Promise<RideRow[]> {
       drop_lat: (r.drop_lat as number) ?? null,
       drop_lng: (r.drop_lng as number) ?? null,
       locked_fare: (r.locked_fare as number) ?? null,
+      final_fare: (r.final_fare as number) ?? null,
+      ended_early: r.ended_early === true,
+      paid_amount: ridePaidAmount(r),
       requested_at: r.requested_at as string,
       accepted_at: (r.accepted_at as string) ?? null,
       started_at: (r.started_at as string) ?? null,
@@ -508,7 +517,7 @@ export const RIDES_PAGE_SIZE = 15;
 
 const RIDE_LIST_SELECT =
   'id, status, pickup_address, drop_address, pickup_lat, pickup_lng, drop_lat, drop_lng, ' +
-  'locked_fare, requested_at, accepted_at, started_at, completed_at, driver_id, ' +
+  'locked_fare, final_fare, ended_early, requested_at, accepted_at, started_at, completed_at, driver_id, ' +
   'rider:riders!rides_rider_id_fkey(full_name), ' +
   'driver:drivers!rides_driver_id_fkey(full_name)';
 
@@ -525,6 +534,9 @@ function mapRideRow(r: Row): RideRow {
     drop_lat: (r.drop_lat as number) ?? null,
     drop_lng: (r.drop_lng as number) ?? null,
     locked_fare: (r.locked_fare as number) ?? null,
+    final_fare: (r.final_fare as number) ?? null,
+    ended_early: r.ended_early === true,
+    paid_amount: ridePaidAmount(r),
     requested_at: r.requested_at as string,
     accepted_at: (r.accepted_at as string) ?? null,
     started_at: (r.started_at as string) ?? null,
@@ -592,6 +604,9 @@ export interface RideDetail {
   est_fare_min: number | null;
   est_fare_max: number | null;
   locked_fare: number | null;
+  final_fare: number | null;
+  ended_early: boolean;
+  paid_amount: number | null;
   payment_method: string | null;
   cancelled_by: string | null;
   cancel_reason: string | null;
@@ -630,7 +645,7 @@ export async function getRideDetail(id: string): Promise<RideDetail | null> {
     .from('rides')
     .select(
         'id, status, pickup_address, drop_address, pickup_lat, pickup_lng, distance_km, ' +
-        'drop_lat, drop_lng, duration_min, waiting_min, est_fare_min, est_fare_max, locked_fare, payment_method, ' +
+        'drop_lat, drop_lng, duration_min, waiting_min, est_fare_min, est_fare_max, locked_fare, final_fare, ended_early, payment_method, ' +
         'cancelled_by, cancel_reason, requested_at, accepted_at, started_at, completed_at, ' +
         'rider_id, driver_id, ' +
         'rider:riders!rides_rider_id_fkey(full_name, phone), ' +
@@ -657,6 +672,9 @@ export async function getRideDetail(id: string): Promise<RideDetail | null> {
     est_fare_min: (r.est_fare_min as number) ?? null,
     est_fare_max: (r.est_fare_max as number) ?? null,
     locked_fare: (r.locked_fare as number) ?? null,
+    final_fare: (r.final_fare as number) ?? null,
+    ended_early: r.ended_early === true,
+    paid_amount: ridePaidAmount(r),
     payment_method: (r.payment_method as string) ?? null,
     cancelled_by: (r.cancelled_by as string) ?? null,
     cancel_reason: (r.cancel_reason as string) ?? null,
@@ -1045,6 +1063,9 @@ export interface DriverRideRow {
   drop_lat: number | null;
   drop_lng: number | null;
   locked_fare: number | null;
+  final_fare: number | null;
+  ended_early: boolean;
+  paid_amount: number | null;
   distance_km: number | null;
   accepted_at: string | null;
   started_at: string | null;
@@ -1068,6 +1089,9 @@ function mapProfileRideRow(row: Row): DriverRideRow {
     drop_lat: (row.drop_lat as number) ?? null,
     drop_lng: (row.drop_lng as number) ?? null,
     locked_fare: (row.locked_fare as number) ?? null,
+    final_fare: (row.final_fare as number) ?? null,
+    ended_early: row.ended_early === true,
+    paid_amount: ridePaidAmount(row),
     distance_km: (row.distance_km as number) ?? null,
     accepted_at: (row.accepted_at as string) ?? null,
     started_at: (row.started_at as string) ?? null,
@@ -1215,7 +1239,7 @@ export async function getDriverProfile(id: string): Promise<DriverProfile | null
       .from('rides')
       .select(
         'id, status, pickup_address, drop_address, pickup_lat, pickup_lng, drop_lat, drop_lng, ' +
-          'locked_fare, distance_km, accepted_at, started_at, completed_at, requested_at, driver_id, ' +
+          'locked_fare, final_fare, ended_early, distance_km, accepted_at, started_at, completed_at, requested_at, driver_id, ' +
           'rider:riders!rides_rider_id_fkey(full_name), driver:drivers!rides_driver_id_fkey(full_name)',
       )
       .eq('driver_id', id)
@@ -1257,7 +1281,7 @@ export async function getDriverProfile(id: string): Promise<DriverProfile | null
   const rideRows = asRows(rides.data).map(mapProfileRideRow);
   const earnings = rideRows
     .filter((r) => r.status === 'completed')
-    .reduce((sum, r) => sum + (r.locked_fare ?? 0), 0);
+    .reduce((sum, r) => sum + (r.paid_amount ?? 0), 0);
 
   const ratingRows = asRows(ratings.data);
   const raters = await resolveUsers(ratingRows.map((r) => r.rater_id as string));
@@ -1379,7 +1403,7 @@ export async function getRiderProfile(id: string): Promise<RiderProfile | null> 
       .from('rides')
       .select(
         'id, status, pickup_address, drop_address, pickup_lat, pickup_lng, drop_lat, drop_lng, ' +
-          'locked_fare, distance_km, accepted_at, started_at, completed_at, requested_at, driver_id, ' +
+          'locked_fare, final_fare, ended_early, distance_km, accepted_at, started_at, completed_at, requested_at, driver_id, ' +
           'rider:riders!rides_rider_id_fkey(full_name), driver:drivers!rides_driver_id_fkey(full_name)',
         { count: 'exact' },
       )
@@ -1724,7 +1748,7 @@ export type Granularity = 'day' | 'month' | 'quarter' | 'year';
 export interface AnalyticsBucket {
   label: string;
   rides: number; // completed rides in bucket
-  rideRevenue: number; // sum of completed locked_fare (goes to drivers)
+  rideRevenue: number; // sum of completed actual paid fare (goes to drivers)
   subsRevenue: number; // subscription income (platform)
 }
 
@@ -1767,7 +1791,7 @@ export async function getAnalytics(grain: Granularity): Promise<AnalyticsResult>
   const [ridesRes, subsRes] = await Promise.all([
     svc
       .from('rides')
-      .select('completed_at, locked_fare, status')
+      .select('completed_at, locked_fare, final_fare, status')
       .eq('status', 'completed')
       .gte('completed_at', since)
       .order('completed_at', { ascending: true }),
@@ -1793,7 +1817,7 @@ export async function getAnalytics(grain: Granularity): Promise<AnalyticsResult>
     if (!at) continue;
     const s = slot(bucketKey(at, grain));
     s.rides += 1;
-    s.rideRevenue += (r.locked_fare as number) ?? 0;
+    s.rideRevenue += ridePaidAmount(r) ?? 0;
   }
   for (const sub of asRows(subsRes.data)) {
     if (sub.status === 'refunded') continue;

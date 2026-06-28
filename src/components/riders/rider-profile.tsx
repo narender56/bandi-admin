@@ -171,7 +171,7 @@ export function RiderProfileView({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatINR(r.locked_fare)}
+                        {formatINR(r.paid_amount)}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {formatDateTime(r.requested_at)}
