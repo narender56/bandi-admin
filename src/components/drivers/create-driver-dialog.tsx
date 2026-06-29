@@ -70,6 +70,14 @@ const isPdf = (file?: UploadedDriverFile) =>
   !!file && /\.pdf($|\?)/i.test(file.fileName);
 const VEHICLE_PHOTOS = ['Front view', 'Rear view', 'Side view'];
 const PHONE_RE = /^(\+91[-\s]?|0)?[6-9]\d{9}$/;
+const DEFAULT_MILEAGE_BY_TYPE: Record<VehicleType, number> = {
+  bike: 45,
+  auto: 28,
+  hatchback: 17,
+  sedan: 15,
+  premium: 12,
+  xl: 10,
+};
 
 const initialValues = {
   fullName: '',
@@ -84,6 +92,8 @@ const initialValues = {
   regNo: '',
   model: '',
   color: '',
+  fuelType: 'petrol',
+  mileageKmpl: DEFAULT_MILEAGE_BY_TYPE.auto,
   upiId: '',
   paymentPhone: '',
 };
@@ -115,6 +125,11 @@ const validationSchema = Yup.object({
   regNo: Yup.string().trim().required('Vehicle registration is required'),
   model: Yup.string().trim().required('Vehicle model is required'),
   color: Yup.string().trim().required('Vehicle color is required'),
+  fuelType: Yup.string().trim(),
+  mileageKmpl: Yup.number()
+    .typeError('Mileage must be a number')
+    .moreThan(0, 'Mileage must be greater than 0')
+    .required('Mileage is required'),
   upiId: Yup.string()
     .trim()
     .matches(UPI_RE, { message: 'Enter a valid UPI ID (e.g. name@bank)', excludeEmptyString: true }),
@@ -423,9 +438,14 @@ export function CreateDriverDialog() {
                 <Stack label="Vehicle type">
                   <Select
                     value={formik.values.vehicleType}
-                    onValueChange={(value) =>
-                      formik.setFieldValue('vehicleType', value as VehicleType)
-                    }
+                    onValueChange={(value) => {
+                      const vehicleType = value as VehicleType;
+                      formik.setFieldValue('vehicleType', vehicleType);
+                      formik.setFieldValue(
+                        'mileageKmpl',
+                        DEFAULT_MILEAGE_BY_TYPE[vehicleType] ?? 18,
+                      );
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -456,6 +476,32 @@ export function CreateDriverDialog() {
                   label="Vehicle color"
                   formik={formik}
                   error={fieldError('color')}
+                />
+                <Stack label="Fuel type">
+                  <Select
+                    value={formik.values.fuelType}
+                    onValueChange={(value) =>
+                      formik.setFieldValue('fuelType', value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="petrol">Petrol</SelectItem>
+                      <SelectItem value="diesel">Diesel</SelectItem>
+                      <SelectItem value="cng">CNG</SelectItem>
+                      <SelectItem value="ev">EV</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {fieldError('fuelType')}
+                </Stack>
+                <TextField
+                  name="mileageKmpl"
+                  label="Mileage (km/l)"
+                  type="number"
+                  formik={formik}
+                  error={fieldError('mileageKmpl')}
                 />
                 <TextField
                   name="upiId"
@@ -642,6 +688,10 @@ export function CreateDriverDialog() {
                   <Preview
                     label="Model / color"
                     value={`${formik.values.model} · ${formik.values.color}`}
+                  />
+                  <Preview
+                    label="Fuel / mileage"
+                    value={`${formik.values.fuelType} · ${formik.values.mileageKmpl} km/l`}
                   />
                   <Preview
                     label="UPI ID"

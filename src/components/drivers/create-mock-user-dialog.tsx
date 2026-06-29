@@ -26,6 +26,14 @@ import {
 } from '@/components/ui/select';
 
 const PHONE_RE = /^(\+91[-\s]?|0)?[6-9]\d{9}$/;
+const DEFAULT_MILEAGE_BY_TYPE: Record<VehicleType, number> = {
+  bike: 45,
+  auto: 28,
+  hatchback: 17,
+  sedan: 15,
+  premium: 12,
+  xl: 10,
+};
 
 /**
  * Quick mock-account creator for testing: spins up an auth user + a ready
@@ -39,6 +47,8 @@ export function CreateMockUserDialog() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [vehicleType, setVehicleType] = useState<VehicleType>('auto');
+  const [fuelType, setFuelType] = useState('petrol');
+  const [mileageKmpl, setMileageKmpl] = useState(String(DEFAULT_MILEAGE_BY_TYPE.auto));
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -48,6 +58,8 @@ export function CreateMockUserDialog() {
     setFullName('');
     setPhone('');
     setVehicleType('auto');
+    setFuelType('petrol');
+    setMileageKmpl(String(DEFAULT_MILEAGE_BY_TYPE.auto));
     setError(null);
     setDone(false);
   };
@@ -56,12 +68,18 @@ export function CreateMockUserDialog() {
     setError(null);
     if (!fullName.trim()) return setError('Enter a name');
     if (!PHONE_RE.test(phone.trim())) return setError('Enter a valid Indian mobile number');
+    const mileage = Number(mileageKmpl);
+    if (role === 'driver' && (!Number.isFinite(mileage) || mileage <= 0)) {
+      return setError('Enter valid vehicle mileage');
+    }
     startTransition(async () => {
       const result = await createMockUser({
         role,
         fullName: fullName.trim(),
         phone: phone.trim(),
         vehicleType: role === 'driver' ? vehicleType : undefined,
+        fuelType: role === 'driver' ? fuelType : undefined,
+        mileageKmpl: role === 'driver' ? mileage : undefined,
       });
       if (result) {
         setError(result);
@@ -141,21 +159,58 @@ export function CreateMockUserDialog() {
               />
             </div>
             {role === 'driver' && (
-              <div className="space-y-1.5">
-                <Label>Vehicle type</Label>
-                <Select value={vehicleType} onValueChange={(v) => setVehicleType(v as VehicleType)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VEHICLE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {vehicleLabel(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <div className="space-y-1.5">
+                  <Label>Vehicle type</Label>
+                  <Select
+                    value={vehicleType}
+                    onValueChange={(v) => {
+                      const nextType = v as VehicleType;
+                      setVehicleType(nextType);
+                      setMileageKmpl(String(DEFAULT_MILEAGE_BY_TYPE[nextType] ?? 18));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VEHICLE_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {vehicleLabel(t)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Fuel type</Label>
+                    <Select value={fuelType} onValueChange={setFuelType}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="petrol">Petrol</SelectItem>
+                        <SelectItem value="diesel">Diesel</SelectItem>
+                        <SelectItem value="cng">CNG</SelectItem>
+                        <SelectItem value="ev">EV</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="mock-mileage">Mileage</Label>
+                    <Input
+                      id="mock-mileage"
+                      value={mileageKmpl}
+                      onChange={(e) => setMileageKmpl(e.target.value)}
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      inputMode="decimal"
+                    />
+                  </div>
+                </div>
+              </>
             )}
             {error && <p className="text-sm text-danger">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">

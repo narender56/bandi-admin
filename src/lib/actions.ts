@@ -465,6 +465,8 @@ export async function createDriver(input: {
   regNo: string;
   model: string;
   color: string;
+  fuelType?: string;
+  mileageKmpl?: number;
   upiId: string;
   paymentPhone: string;
   paymentQr?: UploadedDriverFile;
@@ -485,6 +487,14 @@ export async function createDriver(input: {
   if (!phone) return 'Enter a valid Indian mobile number';
   if (!input.upiId?.trim() && !input.paymentPhone?.trim()) {
     return 'Add at least one way for riders to pay the driver (UPI ID or payment phone)';
+  }
+  const fuelType = input.fuelType?.trim().toLowerCase() || null;
+  const mileageKmpl =
+    typeof input.mileageKmpl === 'number' && Number.isFinite(input.mileageKmpl)
+      ? input.mileageKmpl
+      : null;
+  if (mileageKmpl !== null && mileageKmpl <= 0) {
+    return 'Vehicle mileage must be greater than 0';
   }
   if (!input.verifiedInPerson) return 'Confirm that identity and originals were verified in person';
   if (!input.avatar?.publicUrl) return 'Driver profile photo is required';
@@ -539,6 +549,8 @@ export async function createDriver(input: {
       reg_no: input.regNo.trim(),
       model: input.model.trim(),
       color: input.color.trim(),
+      fuel_type: fuelType,
+      mileage_kmpl: mileageKmpl,
       photos: input.vehiclePhotos.map((photo) => photo.publicUrl),
     });
     if (vehicleResult.error) throw vehicleResult.error;
@@ -591,6 +603,8 @@ export async function createMockUser(input: {
   fullName: string;
   phone: string;
   vehicleType?: VehicleType;
+  fuelType?: string;
+  mileageKmpl?: number;
 }): Promise<string | null> {
   await requireCapability('drivers:onboard');
   if (!input.fullName.trim()) return 'Name is required';
@@ -634,15 +648,26 @@ export async function createMockUser(input: {
     });
     if (driverResult.error) return driverResult.error.message;
     const { data: vehicle } = await svc.from('vehicles').select('id').eq('driver_id', uid).maybeSingle();
+    const vehicleFields = {
+      type: input.vehicleType ?? 'auto',
+      fuel_type: input.fuelType?.trim().toLowerCase() || 'petrol',
+      mileage_kmpl: input.mileageKmpl ?? null,
+    };
     if (!vehicle) {
       const vehicleResult = await svc.from('vehicles').insert({
         driver_id: uid,
-        type: input.vehicleType ?? 'auto',
+        ...vehicleFields,
         reg_no: `TS09MK${bare.slice(-4)}`,
         model: 'Mock vehicle',
         color: 'White',
         is_active: true,
       });
+      if (vehicleResult.error) return vehicleResult.error.message;
+    } else {
+      const vehicleResult = await svc
+        .from('vehicles')
+        .update(vehicleFields)
+        .eq('id', (vehicle as { id: string }).id);
       if (vehicleResult.error) return vehicleResult.error.message;
     }
     await svc.from('wallets').upsert({ driver_id: uid, balance: 500 });
