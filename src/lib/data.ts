@@ -994,6 +994,20 @@ export interface VehicleTypeConfig {
   is_enabled: boolean;
 }
 
+export interface FuelPriceConfig {
+  id: string;
+  country: string;
+  state: string | null;
+  city: string | null;
+  fuel_type: string;
+  price_per_litre: number;
+  currency: string;
+  effective_from: string;
+  effective_to: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export async function getVehicleTypeConfigs(): Promise<VehicleTypeConfig[]> {
   const svc = serviceClient();
   const { data } = await svc
@@ -1001,6 +1015,22 @@ export async function getVehicleTypeConfigs(): Promise<VehicleTypeConfig[]> {
     .select('type, label, seats, sort_order, is_enabled')
     .order('sort_order');
   return (data ?? []) as VehicleTypeConfig[];
+}
+
+export async function getFuelPriceConfigs(): Promise<FuelPriceConfig[]> {
+  const svc = serviceClient();
+  const { data } = await svc
+    .from('fuel_price_config')
+    .select(
+      'id, country, state, city, fuel_type, price_per_litre, currency, effective_from, effective_to, is_active, created_at',
+    )
+    .order('is_active', { ascending: false })
+    .order('country')
+    .order('state', { nullsFirst: true })
+    .order('city', { nullsFirst: true })
+    .order('fuel_type')
+    .order('effective_from', { ascending: false });
+  return (data ?? []) as FuelPriceConfig[];
 }
 
 /** A geographic grant for a staff member. NULL state/city widen the scope. */

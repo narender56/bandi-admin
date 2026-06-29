@@ -914,6 +914,61 @@ export async function updateVehicleTypeConfig(
   return null;
 }
 
+export async function replaceFuelPriceConfig(values: {
+  country: string;
+  state: string | null;
+  city: string | null;
+  fuel_type: string;
+  price_per_litre: number;
+  currency?: string;
+}): Promise<string | null> {
+  const session = await requireCapability('fares:write');
+  const scope: FareScope = {
+    country: norm(values.country),
+    state: norm(values.state),
+    city: norm(values.city),
+  };
+  if (!scope.country) return 'Country is required';
+  if (scope.city && !scope.state) return 'A city scope needs a state';
+  try {
+    await assertFareScopeAllowed(session, scope);
+  } catch {
+    return 'That scope is outside your assigned regions';
+  }
+  if (!Number.isFinite(values.price_per_litre) || values.price_per_litre <= 0) {
+    return 'Fuel price must be greater than 0';
+  }
+
+  const fuelType = norm(values.fuel_type) ?? 'petrol';
+  const currency = norm(values.currency) ?? 'INR';
+  const svc = serviceClient();
+  const { data, error } = await svc.rpc('replace_fuel_price_config', {
+    p_country: scope.country,
+    p_state: scope.state,
+    p_city: scope.city,
+    p_fuel_type: fuelType,
+    p_price_per_litre: values.price_per_litre,
+    p_currency: currency,
+  });
+  if (error) return error.message;
+
+  await audit(
+    session,
+    'fuel_price.replace',
+    'fuel_price_config',
+    String(data ?? scopeLabel(scope)),
+    `${fuelType} ${scopeLabel(scope)} = ${currency} ${values.price_per_litre}/litre`,
+    {
+      ...scope,
+      fuel_type: fuelType,
+      price_per_litre: values.price_per_litre,
+      currency,
+    },
+  );
+  revalidatePath('/[locale]/fares', 'page');
+  return null;
+}
+
 // ── Driver onboarding: document review ───────────────────────
 export async function reviewDocument(
   docId: string,
