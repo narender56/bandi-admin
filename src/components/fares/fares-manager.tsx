@@ -473,6 +473,8 @@ function VehicleCatalogue({
             <TableRow>
               <TableHead>Type</TableHead>
               <TableHead className="text-right">Seats</TableHead>
+              <TableHead>Fuel</TableHead>
+              <TableHead className="text-right">Mileage</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -496,12 +498,21 @@ function VehicleTypeRow({
   onSaved: () => void;
 }) {
   const [seats, setSeats] = useState(String(type.seats));
+  const [fuelType, setFuelType] = useState(type.default_fuel_type || 'petrol');
+  const [mileage, setMileage] = useState(String(type.default_mileage_kmpl));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const seatsChanged = seats.trim() !== String(type.seats);
+  const fuelChanged = fuelType !== (type.default_fuel_type || 'petrol');
+  const mileageChanged = mileage.trim() !== String(type.default_mileage_kmpl);
 
-  const save = (values: { is_enabled?: boolean; seats?: number }) =>
+  const save = (values: {
+    is_enabled?: boolean;
+    seats?: number;
+    default_fuel_type?: string;
+    default_mileage_kmpl?: number;
+  }) =>
     startTransition(async () => {
       setError(null);
       const err = await updateVehicleTypeConfig(type.type, values);
@@ -537,6 +548,56 @@ function VehicleTypeRow({
           )}
         </div>
         {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <Select value={fuelType} onValueChange={setFuelType}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="petrol">Petrol</SelectItem>
+              <SelectItem value="diesel">Diesel</SelectItem>
+              <SelectItem value="cng">CNG</SelectItem>
+              <SelectItem value="ev">EV</SelectItem>
+            </SelectContent>
+          </Select>
+          {fuelChanged && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => save({ default_fuel_type: fuelType })}
+            >
+              Save
+            </Button>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Input
+            type="number"
+            min="0.1"
+            step="0.1"
+            className="w-24 text-right"
+            value={mileage}
+            onChange={(e) => setMileage(e.target.value)}
+          />
+          <span className="text-xs text-muted-foreground">km/l</span>
+          {mileageChanged && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isPending}
+              onClick={() =>
+                save({ default_mileage_kmpl: Number(mileage) })
+              }
+            >
+              Save
+            </Button>
+          )}
+        </div>
       </TableCell>
       <TableCell>
         <Badge variant={type.is_enabled ? 'success' : 'neutral'}>

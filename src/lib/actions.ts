@@ -884,7 +884,13 @@ export async function removeFareConfig(id: string): Promise<void> {
 /** Enable/disable a vehicle type platform-wide, or adjust its label/seats. */
 export async function updateVehicleTypeConfig(
   type: string,
-  values: { is_enabled?: boolean; seats?: number; label?: string },
+  values: {
+    is_enabled?: boolean;
+    seats?: number;
+    label?: string;
+    default_fuel_type?: string;
+    default_mileage_kmpl?: number;
+  },
 ): Promise<string | null> {
   const session = await requireCapability('fares:write');
   const patch: Record<string, unknown> = {};
@@ -898,6 +904,17 @@ export async function updateVehicleTypeConfig(
   if (typeof values.label === 'string') {
     if (!values.label.trim()) return 'Enter a label';
     patch.label = values.label.trim();
+  }
+  if (typeof values.default_fuel_type === 'string') {
+    const fuelType = values.default_fuel_type.trim().toLowerCase();
+    if (!fuelType) return 'Choose a fuel type';
+    patch.default_fuel_type = fuelType;
+  }
+  if (typeof values.default_mileage_kmpl === 'number') {
+    if (!Number.isFinite(values.default_mileage_kmpl) || values.default_mileage_kmpl <= 0) {
+      return 'Mileage must be greater than 0';
+    }
+    patch.default_mileage_kmpl = values.default_mileage_kmpl;
   }
   if (Object.keys(patch).length === 0) return null;
 

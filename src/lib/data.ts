@@ -990,6 +990,8 @@ export interface VehicleTypeConfig {
   type: string;
   label: string;
   seats: number;
+  default_fuel_type: string;
+  default_mileage_kmpl: number;
   sort_order: number;
   is_enabled: boolean;
 }
@@ -1012,7 +1014,7 @@ export async function getVehicleTypeConfigs(): Promise<VehicleTypeConfig[]> {
   const svc = serviceClient();
   const { data } = await svc
     .from('vehicle_type_config')
-    .select('type, label, seats, sort_order, is_enabled')
+    .select('type, label, seats, default_fuel_type, default_mileage_kmpl, sort_order, is_enabled')
     .order('sort_order');
   return (data ?? []) as VehicleTypeConfig[];
 }
