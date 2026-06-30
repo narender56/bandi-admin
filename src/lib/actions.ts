@@ -1605,7 +1605,7 @@ export async function setReportStatus(
 export async function upsertSubscriptionPlan(values: {
   id?: string;
   country: string | null;
-  vehicle_type: 'auto' | 'bike' | 'cab';
+  vehicle_type: VehicleType;
   price: number;
   currency: string;
 }): Promise<string | null> {

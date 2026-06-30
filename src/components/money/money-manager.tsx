@@ -45,10 +45,9 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { VEHICLE_TYPES, vehicleLabel, type VehicleType } from '@/lib/vehicle-types';
 
-type Vehicle = 'auto' | 'bike' | 'cab';
-
-const VEHICLE_LABEL: Record<string, string> = { auto: 'Auto', bike: 'Bike', cab: 'Cab' };
+type Vehicle = VehicleType;
 
 // Supported geography for plan scopes (mirrors the fares page). Add more here.
 const COUNTRIES = ['India'];
@@ -98,7 +97,7 @@ export function PlansManager({
                     {p.country ? p.country : <Badge variant="neutral">Global default</Badge>}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="default">{VEHICLE_LABEL[p.vehicle_type] ?? p.vehicle_type}</Badge>
+                    <Badge variant="default">{vehicleLabel(p.vehicle_type)}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     {p.currency === 'INR' ? '₹' : `${p.currency} `}
@@ -124,7 +123,7 @@ export function PlansManager({
 }
 
 const planSchema = Yup.object({
-  vehicle_type: Yup.string().oneOf(['auto', 'bike', 'cab']).required(),
+  vehicle_type: Yup.string().oneOf(VEHICLE_TYPES as unknown as string[]).required(),
   country: Yup.string().trim(),
   price: Yup.number()
     .typeError('Daily fee must be a number')
@@ -218,9 +217,11 @@ function PlanFormDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="auto">Auto</SelectItem>
-                    <SelectItem value="bike">Bike</SelectItem>
-                    <SelectItem value="cab">Cab</SelectItem>
+                    {VEHICLE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {vehicleLabel(t)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
