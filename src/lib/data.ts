@@ -1340,7 +1340,15 @@ export interface DriverProfile {
   total_rides: number;
   created_at: string;
   manager_name: string | null;
-  vehicle: { reg_no: string | null; model: string | null; color: string | null; type: string; photos: string[] } | null;
+  vehicle: {
+    reg_no: string | null;
+    model: string | null;
+    color: string | null;
+    type: string;
+    fuel_type: string | null;
+    mileage_kmpl: number | null;
+    photos: string[];
+  } | null;
   documents: DriverDocument[];
   rides: DriverRideRow[];
   ratings: DriverRatingRow[];
@@ -1370,7 +1378,7 @@ export async function getDriverProfile(id: string): Promise<DriverProfile | null
         'full_name, phone, email, dob, gender, country, state, avatar_url, is_blocked, block_reason, is_on_hold, hold_reason, deactivated_at, deactivation_reason, ' +
         'upi_id, payment_phone, upi_qr_url, ' +
         'manager:admin_profiles!drivers_manager_id_fkey(full_name), ' +
-        'vehicles(reg_no, model, color, type, photos)',
+        'vehicles(reg_no, model, color, type, fuel_type, mileage_kmpl, photos)',
     )
     .eq('id', id)
     .maybeSingle();
@@ -1397,7 +1405,15 @@ export async function getDriverProfile(id: string): Promise<DriverProfile | null
   };
   const manager = row.manager as { full_name?: string } | null;
   const vehicles = row.vehicles as
-    | { reg_no?: string; model?: string; color?: string; type?: string; photos?: string[] }[]
+    | {
+        reg_no?: string;
+        model?: string;
+        color?: string;
+        type?: string;
+        fuel_type?: string;
+        mileage_kmpl?: number;
+        photos?: string[];
+      }[]
     | null;
   const v = vehicles?.[0];
 
@@ -1500,6 +1516,8 @@ export async function getDriverProfile(id: string): Promise<DriverProfile | null
           model: v.model ?? null,
           color: v.color ?? null,
           type: v.type ?? 'auto',
+          fuel_type: v.fuel_type ?? null,
+          mileage_kmpl: v.mileage_kmpl ?? null,
           photos: v.photos ?? [],
         }
       : null,

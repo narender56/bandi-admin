@@ -344,6 +344,15 @@ export function DriverProfileView({
                     ? `${driver.vehicle.reg_no} · ${driver.vehicle.model ?? ''} ${driver.vehicle.color ?? ''}`
                     : '—'}
                 </Field>
+                <Field label="Fuel / mileage">
+                  {driver.vehicle
+                    ? `${driver.vehicle.fuel_type ?? '—'} · ${
+                        driver.vehicle.mileage_kmpl
+                          ? `${driver.vehicle.mileage_kmpl} km/l`
+                          : 'mileage not set'
+                      }`
+                    : '—'}
+                </Field>
               </CardContent>
             </Card>
           )}
@@ -1185,6 +1194,8 @@ function BaseDataForm({ driver }: { driver: DriverProfile }) {
     regNo: driver.vehicle?.reg_no ?? '',
     model: driver.vehicle?.model ?? '',
     color: driver.vehicle?.color ?? '',
+    fuelType: driver.vehicle?.fuel_type ?? '',
+    mileageKmpl: driver.vehicle?.mileage_kmpl?.toString() ?? '',
   });
   const [v, setV] = useState(initial);
   const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -1369,6 +1380,36 @@ function BaseDataForm({ driver }: { driver: DriverProfile }) {
               id="color"
               value={v.color}
               onChange={set('color')}
+              disabled={!editing}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="fuelType">Fuel type</Label>
+            <Select
+              value={v.fuelType || 'petrol'}
+              onValueChange={setVal('fuelType')}
+              disabled={!editing}
+            >
+              <SelectTrigger id="fuelType">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="petrol">Petrol</SelectItem>
+                <SelectItem value="diesel">Diesel</SelectItem>
+                <SelectItem value="cng">CNG</SelectItem>
+                <SelectItem value="electric">Electric</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mileageKmpl">Mileage (km/l)</Label>
+            <Input
+              id="mileageKmpl"
+              type="number"
+              min="1"
+              step="0.1"
+              value={v.mileageKmpl}
+              onChange={set('mileageKmpl')}
               disabled={!editing}
             />
           </div>

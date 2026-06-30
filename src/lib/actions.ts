@@ -693,6 +693,8 @@ export async function updateDriverBaseData(
     regNo: string;
     model: string;
     color: string;
+    fuelType: string;
+    mileageKmpl: string;
   },
 ): Promise<string | null> {
   const session = await requireCapability('drivers:onboard');
@@ -705,6 +707,13 @@ export async function updateDriverBaseData(
   }
   if (!values.regNo.trim() || !values.model.trim() || !values.color.trim()) {
     return 'Registration, model, and vehicle color are required';
+  }
+  const mileage =
+    values.mileageKmpl.trim() === ''
+      ? null
+      : Number(values.mileageKmpl.trim());
+  if (mileage !== null && (!Number.isFinite(mileage) || mileage <= 0)) {
+    return 'Mileage must be greater than 0';
   }
   const phone = normalizePhone(values.phone);
   if (!phone) return 'Enter a valid Indian mobile number';
@@ -744,6 +753,8 @@ export async function updateDriverBaseData(
     reg_no: values.regNo.trim(),
     model: values.model.trim() || null,
     color: values.color.trim() || null,
+    fuel_type: values.fuelType.trim().toLowerCase() || null,
+    mileage_kmpl: mileage,
   };
   if (existing) {
     if (vehicleFields.reg_no) {
