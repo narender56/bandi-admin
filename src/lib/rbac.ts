@@ -63,7 +63,7 @@ const MATRIX: Record<StaffRole, Capability[]> = {
     'sos:ack',
     'settings:write',
   ],
-  support: ['support:manage', 'profiles:view', 'sos:ack', 'operations:manage'],
+  support: ['support:manage', 'profiles:view', 'sos:ack', 'operations:manage', 'rides:cancel'],
 };
 
 export const STAFF_ROLES: readonly StaffRole[] = ['super_admin', 'admin', 'support'];

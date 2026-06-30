@@ -2,15 +2,37 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { MapPin, Navigation, XCircle, Radio, ExternalLink, Route, PlayCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  MapPin,
+  Navigation,
+  XCircle,
+  Radio,
+  ExternalLink,
+  Route,
+  PlayCircle,
+  PhoneCall,
+} from 'lucide-react';
 
 import type { RideDetail, RideSimulationPoint } from '@/lib/data';
-import { adminCancelRide } from '@/lib/actions';
+import {
+  adminCancelRide,
+  adminCloseRideWithNotes,
+  type AdminRideCloseOutcome,
+} from '@/lib/actions';
 import { formatINR, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogTrigger,
@@ -104,31 +126,35 @@ export function RideDetailView({
           <p className="mt-1 font-mono text-xs text-muted-foreground">{ride.id}</p>
         </div>
         {flags.canCancel && isLive && (
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="danger">
-                <XCircle className="size-4" /> Cancel ride
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Cancel this ride?</DialogTitle>
-                <DialogDescription>
-                  This force-cancels the trip and frees the assigned driver.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline">Keep ride</Button>
-                </DialogClose>
-                <DialogClose asChild>
-                  <Button variant="danger" onClick={cancel} disabled={isPending}>
-                    {isPending ? 'Cancelling…' : 'Cancel ride'}
-                  </Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <div className="flex flex-wrap gap-2">
+            <SupportCloseRideDialog rideId={ride.id} isPending={isPending} />
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="danger">
+                  <XCircle className="size-4" /> Cancel ride
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Cancel this ride?</DialogTitle>
+                  <DialogDescription>
+                    This force-cancels the trip and frees the assigned driver. Use support close when
+                    staff has spoken to the rider/driver and needs notes saved.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="outline">Keep ride</Button>
+                  </DialogClose>
+                  <DialogClose asChild>
+                    <Button variant="danger" onClick={cancel} disabled={isPending}>
+                      {isPending ? 'Cancelling…' : 'Cancel ride'}
+                    </Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         )}
       </div>
 
@@ -216,6 +242,17 @@ export function RideDetailView({
                     <Field label="Reason">{ride.cancel_reason ?? '—'}</Field>
                   </>
                 )}
+                {ride.admin_closed_at && (
+                  <>
+                    <Field label="Support outcome">
+                      {ride.admin_close_outcome?.replace('_', ' ') ?? '—'}
+                    </Field>
+                    <Field label="Support closed at">{formatDateTime(ride.admin_closed_at)}</Field>
+                    <div className="sm:col-span-2">
+                      <Field label="Support notes">{ride.admin_close_note ?? '—'}</Field>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -261,6 +298,93 @@ export function RideDetailView({
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function SupportCloseRideDialog({
+  rideId,
+  isPending,
+}: {
+  rideId: string;
+  isPending: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [outcome, setOutcome] = useState<AdminRideCloseOutcome>('unconfirmed');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, startTransition] = useTransition();
+
+  const submit = () =>
+    startTransition(async () => {
+      const err = await adminCloseRideWithNotes(rideId, outcome, note);
+      if (err) {
+        setError(err);
+        return;
+      }
+      setError(null);
+      setOpen(false);
+      setNote('');
+      router.refresh();
+    });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <PhoneCall className="size-4" /> Support close
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Close ride from support</DialogTitle>
+          <DialogDescription>
+            Call the rider first, confirm what happened, then save the outcome. Both rider and
+            driver will get an in-app notification.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="rounded-lg border border-warning/25 bg-warning/10 p-3 text-sm text-warning">
+          <div className="flex gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Use this only for operational issues like phone switched off, emergency support, or
+              payment confirmation problems.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Outcome</label>
+          <Select value={outcome} onValueChange={(value) => setOutcome(value as AdminRideCloseOutcome)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unconfirmed">Close for payment review</SelectItem>
+              <SelectItem value="completed">Mark completed and paid</SelectItem>
+              <SelectItem value="cancelled">Cancel with no completion</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Notes after call</label>
+          <Textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Example: Spoke to rider at 8:42 PM. Driver phone switched off after pickup; rider confirmed payment was not made."
+            rows={5}
+          />
+        </div>
+        {error && <p className="text-sm font-medium text-danger">{error}</p>}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Keep ride open
+          </Button>
+          <Button onClick={submit} disabled={isPending || submitting}>
+            {submitting ? 'Closing…' : 'Close ride'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

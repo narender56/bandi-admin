@@ -207,6 +207,135 @@ export async function adminCancelRide(rideId: string): Promise<void> {
   revalidatePath('/[locale]/live', 'page');
 }
 
+export type AdminRideCloseOutcome = 'completed' | 'unconfirmed' | 'cancelled';
+
+const SUPPORT_CLOSE_LIVE_STATUSES = [
+  'requested',
+  'searching',
+  'airport_fee_confirmation',
+  'accepted',
+  'arrived',
+  'in_progress',
+];
+
+/** Close an active ride from support after staff has called the rider/driver. */
+export async function adminCloseRideWithNotes(
+  rideId: string,
+  outcome: AdminRideCloseOutcome,
+  note: string,
+): Promise<string | null> {
+  const session = await requireCapability('rides:cancel');
+  const cleanNote = note.trim();
+  if (!cleanNote || cleanNote.length < 10) {
+    return 'Add clear notes after calling the rider/driver first.';
+  }
+  if (!['completed', 'unconfirmed', 'cancelled'].includes(outcome)) {
+    return 'Choose how support closed this ride.';
+  }
+
+  const svc = serviceClient();
+  const { data: ride, error } = await svc
+    .from('rides')
+    .select('id, status, rider_id, driver_id, locked_fare, final_fare')
+    .eq('id', rideId)
+    .maybeSingle();
+
+  if (error) return error.message;
+  if (!ride) return 'Ride not found.';
+
+  const currentStatus = (ride as { status: string }).status;
+  if (!SUPPORT_CLOSE_LIVE_STATUSES.includes(currentStatus)) {
+    return `This ride is already ${currentStatus.replace('_', ' ')}.`;
+  }
+
+  const now = new Date().toISOString();
+  const common = {
+    admin_close_note: cleanNote,
+    admin_close_outcome: outcome,
+    admin_closed_by: session.uid,
+    admin_closed_at: now,
+  };
+  const update =
+    outcome === 'completed'
+      ? {
+          ...common,
+          status: 'completed',
+          completed_at: now,
+          paid_confirmed: true,
+          final_fare:
+            (ride as { final_fare?: number | null }).final_fare ??
+            (ride as { locked_fare?: number | null }).locked_fare ??
+            null,
+        }
+      : outcome === 'unconfirmed'
+        ? {
+            ...common,
+            status: 'unconfirmed',
+            completed_at: now,
+            paid_confirmed: false,
+            cancel_reason: 'support_closed_payment_unconfirmed',
+          }
+        : {
+            ...common,
+            status: 'cancelled',
+            cancelled_by: 'system',
+            cancel_reason: 'support_closed',
+          };
+
+  const { error: updateError } = await svc.from('rides').update(update).eq('id', rideId);
+  if (updateError) return updateError.message;
+
+  const driverId = (ride as { driver_id?: string | null }).driver_id;
+  if (driverId) {
+    await Promise.all([
+      svc.from('drivers').update({ status: 'offline' }).eq('id', driverId),
+      svc.from('driver_locations').update({ is_online: false }).eq('driver_id', driverId),
+    ]);
+  }
+
+  const riderId = (ride as { rider_id?: string | null }).rider_id;
+  const statusText =
+    outcome === 'completed'
+      ? 'marked completed'
+      : outcome === 'unconfirmed'
+        ? 'closed for payment review'
+        : 'cancelled';
+  await Promise.all([
+    riderId
+      ? notifyUser(
+          riderId,
+          'rider',
+          'Ride closed by support',
+          `Bandi support ${statusText} this ride after review. Note: ${cleanNote}`,
+          { ride_id: rideId, status: outcome, admin_closed: true },
+        )
+      : Promise.resolve(),
+    driverId
+      ? notifyUser(
+          driverId,
+          'driver',
+          'Ride closed by support',
+          `Bandi support ${statusText} this ride after review. Note: ${cleanNote}`,
+          { ride_id: rideId, status: outcome, admin_closed: true },
+        )
+      : Promise.resolve(),
+  ]);
+
+  await audit(
+    session,
+    'ride.support_close',
+    'ride',
+    rideId,
+    `Support ${statusText} ride`,
+    { outcome, note: cleanNote, previous_status: currentStatus },
+  );
+
+  revalidatePath('/[locale]/live', 'page');
+  revalidatePath('/[locale]/rides', 'page');
+  revalidatePath(`/[locale]/rides/${rideId}`, 'page');
+  return null;
+}
+
 /** Acknowledge an SOS alert (staff is now on it). */
 export async function acknowledgeSos(sosId: string): Promise<void> {
   const session = await requireCapability('sos:ack');

@@ -742,6 +742,10 @@ export interface RideDetail {
   payment_method: string | null;
   cancelled_by: string | null;
   cancel_reason: string | null;
+  admin_close_note: string | null;
+  admin_close_outcome: string | null;
+  admin_closed_at: string | null;
+  admin_closed_by: string | null;
   requested_at: string;
   accepted_at: string | null;
   started_at: string | null;
@@ -778,7 +782,8 @@ export async function getRideDetail(id: string): Promise<RideDetail | null> {
     .select(
         'id, status, pickup_address, drop_address, pickup_lat, pickup_lng, distance_km, ' +
         'drop_lat, drop_lng, duration_min, waiting_min, est_fare_min, est_fare_max, locked_fare, final_fare, ended_early, payment_method, ' +
-        'cancelled_by, cancel_reason, requested_at, accepted_at, started_at, completed_at, ' +
+        'cancelled_by, cancel_reason, admin_close_note, admin_close_outcome, admin_closed_at, admin_closed_by, ' +
+        'requested_at, accepted_at, started_at, completed_at, ' +
         'rider_id, driver_id, ' +
         'rider:riders!rides_rider_id_fkey(full_name, phone), ' +
         'driver:drivers!rides_driver_id_fkey(full_name, phone)',
@@ -810,6 +815,10 @@ export async function getRideDetail(id: string): Promise<RideDetail | null> {
     payment_method: (r.payment_method as string) ?? null,
     cancelled_by: (r.cancelled_by as string) ?? null,
     cancel_reason: (r.cancel_reason as string) ?? null,
+    admin_close_note: (r.admin_close_note as string) ?? null,
+    admin_close_outcome: (r.admin_close_outcome as string) ?? null,
+    admin_closed_at: (r.admin_closed_at as string) ?? null,
+    admin_closed_by: (r.admin_closed_by as string) ?? null,
     requested_at: r.requested_at as string,
     accepted_at: (r.accepted_at as string) ?? null,
     started_at: (r.started_at as string) ?? null,
@@ -2398,7 +2407,12 @@ export async function getOperationsDashboard(): Promise<OperationsDashboard> {
       entity_id: (saved.entity_id as string) ?? null,
       title: saved.title as string,
       summary: (saved.summary as string) ?? null,
-      href: null,
+      href:
+        saved.entity_type === 'ride' && saved.entity_id
+          ? `/rides/${saved.entity_id as string}`
+          : saved.entity_type === 'driver' && saved.entity_id
+            ? `/drivers/${saved.entity_id as string}`
+            : null,
       assigned_to: (saved.assigned_to as string) ?? null,
       assigned_name: assignee?.full_name ?? null,
       resolution_note: (saved.resolution_note as string) ?? null,
